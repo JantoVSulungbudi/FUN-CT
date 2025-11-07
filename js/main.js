@@ -1,4 +1,4 @@
-import { initializeScene } from './scene.js';
+import { initializeScene, getSceneElements } from './scene.js';
 import { initializeUI } from './ui.js';
 import { initializePhysics } from './physics.js';
 
@@ -44,10 +44,15 @@ document.addEventListener('DOMContentLoaded', function() {
         stencil: true
     });
     
-    // Initialize modules
+    // Initialize scene first
     const scene = initializeScene(engine, canvas);
-    const ui = initializeUI(state, scene);
-    const physics = initializePhysics(state, scene, sinogramCtx);
+    
+    // Get scene elements
+    const sceneElements = getSceneElements();
+    
+    // Initialize UI and Physics
+    initializeUI(state, sceneElements);
+    const physics = initializePhysics(state, sceneElements, sinogramCtx, sinogramWidth, sinogramHeight);
     
     // Store references for other modules to use
     state.scene = scene;
@@ -55,6 +60,8 @@ document.addEventListener('DOMContentLoaded', function() {
     state.sinogramCtx = sinogramCtx;
     state.sinogramWidth = sinogramWidth;
     state.sinogramHeight = sinogramHeight;
+    state.sceneElements = sceneElements;
+    state.physics = physics;
     
     // Run the engine
     engine.runRenderLoop(function() {

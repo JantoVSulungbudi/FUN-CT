@@ -1,28 +1,18 @@
 import { state } from './main.js';
-import { getSceneElements } from './scene.js';
 
-let sceneElements;
-let scanSpeedSlider, objectDensitySlider;
-
-export function initializePhysics(state, scene, sinogramCtx) {
-    sceneElements = getSceneElements();
-    
-    // Get UI sliders
-    scanSpeedSlider = document.getElementById('scan-speed');
-    objectDensitySlider = document.getElementById('object-density');
-    
+export function initializePhysics(state, sceneElements, sinogramCtx, sinogramWidth, sinogramHeight) {
     return {
-        update
+        update: () => update(state, sceneElements, sinogramCtx, sinogramWidth, sinogramHeight)
     };
 }
 
-export function update() {
-    const dt = state.engine.getDeltaTime() / 1000; // Convert to seconds
+function update(state, sceneElements, sinogramCtx, sinogramWidth, sinogramHeight) {
+    const dt = state.engine.getDeltaTime() / 1000;
     state.totalScanTime += dt;
     
     if (state.isScanning && state.currentMode === 'scan') {
         // Get scan speed from UI
-        const scanSpeed = parseInt(scanSpeedSlider.value);
+        const scanSpeed = parseInt(state.sliders.scanSpeed.value);
         
         // Update scanner rotation
         state.currentAngle += dt * scanSpeed * 10;
@@ -38,13 +28,13 @@ export function update() {
         sceneElements.scannerAssembly.rotation.y = (state.currentAngle * Math.PI) / 180;
         
         // Update X-ray beam position and orientation
-        const xrayBeam = sceneElements.scannerAssembly.getChildren()[2]; // X-ray beam is the third child
+        const xrayBeam = sceneElements.scannerAssembly.getChildren()[2];
         xrayBeam.position.x = Math.cos((state.currentAngle * Math.PI) / 180) * 5;
         xrayBeam.position.z = Math.sin((state.currentAngle * Math.PI) / 180) * 5;
         xrayBeam.rotation.y = (state.currentAngle * Math.PI) / 180 + Math.PI / 2;
         
         // Calculate and display attenuation
-        const attenuation = calculateAverageAttenuation(state.currentAngle);
+        const attenuation = calculateAverageAttenuation(state.currentAngle, state, sceneElements);
         const detectedSignal = (0.3 + (1 - attenuation) * 0.7) * 100;
         
         state.ui.currentAngleDisplay.textContent = Math.round(state.currentAngle) + "°";
@@ -57,10 +47,10 @@ export function update() {
         
         // Update sinogram every 2 degrees
         if (Math.round(state.currentAngle) % 2 === 0 && Math.round(state.currentAngle) !== 0) {
-            updateSinogram(Math.round(state.currentAngle));
+            updateSinogram(Math.round(state.currentAngle), state, sceneElements, sinogramCtx, sinogramWidth, sinogramHeight);
         }
         
-        // Store reconstruction data (simplified)
+        // Store reconstruction data
         if (Math.round(state.currentAngle) % 10 === 0) {
             state.reconstructionData.push({
                 angle: state.currentAngle,
@@ -82,16 +72,16 @@ function isPointInBlock(x, z, bx, bz, width, depth) {
 }
 
 // Simulate X-ray attenuation through objects for a specific detector position
-function calculateAttenuationForDetectorPosition(angle, detectorPos) {
+function calculateAttenuationForDetectorPosition(angle, detectorPos, state, sceneElements) {
     const angleRad = (angle * Math.PI) / 180;
-    const density = parseInt(objectDensitySlider.value);
+    const density = parseInt(state.sliders.objectDensity.value);
     
     // Calculate ray from source to detector pixel
     const sourceX = 5 * Math.cos(angleRad);
     const sourceZ = 5 * Math.sin(angleRad);
     
     // Detector position along the detector array (-1 to 1)
-    const detectorOffset = (detectorPos - 0.5) * 2; // Convert to -1 to 1 range
+    const detectorOffset = (detectorPos - 0.5) * 2;
     const detectorX = -5 * Math.cos(angleRad) - Math.sin(angleRad) * detectorOffset * 2.5;
     const detectorZ = -5 * Math.sin(angleRad) + Math.cos(angleRad) * detectorOffset * 2.5;
     
@@ -104,16 +94,16 @@ function calculateAttenuationForDetectorPosition(angle, detectorPos) {
         const x = sourceX * (1 - t) + detectorX * t;
         const z = sourceZ * (1 - t) + detectorZ * t;
         
-        // Check if point is inside objects (using current positions and scales)
+        // Check if point is inside objects
         const cylinderRadius = 0.6 * sceneElements.cylinder.scaling.x;
         if (isPointInCylinder(x, z, sceneElements.cylinder.position.x, sceneElements.cylinder.position.z, cylinderRadius)) {
-            totalAttenuation += 0.9 * (density / 5); // Higher attenuation for more contrast
+            totalAttenuation += 0.9 * (density / 5);
         }
         
         const blockHalfWidth = 0.5 * sceneElements.block.scaling.x;
         const blockHalfDepth = 0.5 * sceneElements.block.scaling.z;
         if (isPointInBlock(x, z, sceneElements.block.position.x, sceneElements.block.position.z, blockHalfWidth * 2, blockHalfDepth * 2)) {
-            totalAttenuation += 0.8 * (density / 5); // Higher attenuation for more contrast
+            totalAttenuation += 0.8 * (density / 5);
         }
     }
     
@@ -121,18 +111,18 @@ function calculateAttenuationForDetectorPosition(angle, detectorPos) {
 }
 
 // Update sinogram display
-function updateSinogram(angle) {
-    const row = Math.floor(angle / 2); // 180 rows for 360 degrees
+function updateSinogram(angle, state, sceneElements, sinogramCtx, sinogramWidth, sinogramHeight) {
+    const row = Math.floor(angle / 2);
     
     if (row >= 0 && row < 180) {
-        for (let col = 0; col < state.sinogramWidth; col++) {
-            const detectorPos = col / state.sinogramWidth;
-            const attenuation = calculateAttenuationForDetectorPosition(angle, detectorPos);
+        for (let col = 0; col < sinogramWidth; col++) {
+            const detectorPos = col / sinogramWidth;
+            const attenuation = calculateAttenuationForDetectorPosition(angle, detectorPos, state, sceneElements);
             state.sinogramData[row][col] = attenuation;
             
             const intensity = Math.floor(255 * (1 - attenuation));
-            state.sinogramCtx.fillStyle = `rgb(${intensity}, ${intensity}, ${intensity})`;
-            state.sinogramCtx.fillRect(col, row, 1, 1);
+            sinogramCtx.fillStyle = `rgb(${intensity}, ${intensity}, ${intensity})`;
+            sinogramCtx.fillRect(col, row, 1, 1);
         }
         
         state.projectionCount++;
@@ -142,13 +132,13 @@ function updateSinogram(angle) {
 }
 
 // Calculate average attenuation for display
-function calculateAverageAttenuation(angle) {
+function calculateAverageAttenuation(angle, state, sceneElements) {
     let total = 0;
     const samples = 10;
     
     for (let i = 0; i < samples; i++) {
         const detectorPos = i / samples;
-        total += calculateAttenuationForDetectorPosition(angle, detectorPos);
+        total += calculateAttenuationForDetectorPosition(angle, detectorPos, state, sceneElements);
     }
     
     return total / samples;
