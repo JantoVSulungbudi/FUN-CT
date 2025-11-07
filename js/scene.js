@@ -1,74 +1,148 @@
-import { initializeScene } from './scene.js';
-import { initializeUI } from './ui.js';
-import { initializePhysics } from './physics.js';
+import { state } from './main.js';
 
-// Global state
-export const state = {
-    isScanning: false,
-    currentAngle: 0,
-    scanProgress: 0,
-    totalScanTime: 0,
-    currentMode: 'scan',
-    reconstructionData: [],
-    sinogramData: new Array(180),
-    projectionCount: 0,
-    isObjectControlActive: false,
-    selectedObject: null,
-    isDragging: false
-};
+// Scene elements
+let scene, camera, light, dirLight;
+let cylinder, block, gantry, xraySource, detector, xrayBeam;
+let scannerAssembly, slicePlane, reconstructionVolume;
+let cylinderMat, blockMat, chamberMat;
 
-// Initialize sinogram data
-for (let i = 0; i < 180; i++) {
-    state.sinogramData[i] = new Array(360).fill(0);
+export function initializeScene(engine, canvas) {
+    // Create the scene
+    scene = new BABYLON.Scene(engine);
+    scene.clearColor = new BABYLON.Color3(0.05, 0.1, 0.15);
+    
+    // Setup camera
+    setupCamera(canvas);
+    
+    // Setup lighting
+    setupLighting();
+    
+    // Setup materials
+    setupMaterials();
+    
+    // Create 3D objects
+    createScanner();
+    createObjects();
+    createScannerAssembly();
+    createVisualizationElements();
+    
+    // Setup object manipulation
+    setupObjectManipulation();
+    
+    return scene;
 }
 
-// Initialize the application
-document.addEventListener('DOMContentLoaded', function() {
-    // Get the canvas and loading element
-    const canvas = document.getElementById('renderCanvas');
-    const loading = document.getElementById('loading');
+function setupCamera(canvas) {
+    camera = new BABYLON.ArcRotateCamera(
+        "camera", 
+        -Math.PI / 2, 
+        Math.PI / 2.5, 
+        12, 
+        new BABYLON.Vector3(0, 2, 0), 
+        scene
+    );
     
-    // Set up sinogram canvas
-    const sinogramCanvas = document.getElementById('sinogram-canvas');
-    const sinogramCtx = sinogramCanvas.getContext('2d');
-    const sinogramWidth = sinogramCanvas.width = 360;
-    const sinogramHeight = sinogramCanvas.height = 180;
+    camera.attachControl(canvas, true);
+    camera.lowerRadiusLimit = 8;
+    camera.upperRadiusLimit = 25;
+    camera.wheelPrecision = 50;
+}
+
+function setupLighting() {
+    light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+    light.intensity = 0.7;
     
-    // Initialize sinogram with black background
-    sinogramCtx.fillStyle = 'black';
-    sinogramCtx.fillRect(0, 0, sinogramWidth, sinogramHeight);
+    dirLight = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(-1, -2, -1), scene);
+    dirLight.position = new BABYLON.Vector3(10, 10, 10);
+    dirLight.intensity = 0.5;
+}
+
+function setupMaterials() {
+    cylinderMat = new BABYLON.StandardMaterial("cylinderMat", scene);
+    cylinderMat.diffuseColor = new BABYLON.Color3(0.9, 0.4, 0.4);
+    cylinderMat.alpha = 0.9;
     
-    // Create the Babylon.js engine
-    const engine = new BABYLON.Engine(canvas, true, {
-        preserveDrawingBuffer: true,
-        stencil: true
-    });
+    blockMat = new BABYLON.StandardMaterial("blockMat", scene);
+    blockMat.diffuseColor = new BABYLON.Color3(0.95, 0.85, 0.3);
+    blockMat.specularColor = new BABYLON.Color3(0.5, 0.5, 0.3);
+    blockMat.alpha = 0.9;
     
-    // Initialize modules
-    const scene = initializeScene(engine, canvas);
-    const ui = initializeUI(state, scene);
-    const physics = initializePhysics(state, scene, sinogramCtx);
+    chamberMat = new BABYLON.StandardMaterial("chamberMat", scene);
+    chamberMat.diffuseColor = new BABYLON.Color3(0.3, 0.3, 0.4);
+    chamberMat.alpha = 0.2;
+}
+
+function createScanner() {
+    gantry = BABYLON.MeshBuilder.CreateCylinder("gantry", 
+        {diameter: 10, height: 6, tessellation: 64}, scene);
+    gantry.material = chamberMat;
+    gantry.position.y = 3;
+}
+
+function createObjects() {
+    cylinder = BABYLON.MeshBuilder.CreateCylinder("cylinder", 
+        {diameter: 1.2, height: 2, tessellation: 32}, scene);
+    cylinder.material = cylinderMat;
+    cylinder.position.y = 2.5;
+    cylinder.position.x = 0.8;
     
-    // Store references for other modules to use
-    state.scene = scene;
-    state.engine = engine;
-    state.sinogramCtx = sinogramCtx;
-    state.sinogramWidth = sinogramWidth;
-    state.sinogramHeight = sinogramHeight;
+    block = BABYLON.MeshBuilder.CreateBox("block", 
+        {width: 1, height: 1.5, depth: 1}, scene);
+    block.material = blockMat;
+    block.position.y = 2;
+    block.position.x = -0.8;
+    block.position.z = 0.8;
+}
+
+function createScannerAssembly() {
+    const xraySource = BABYLON.MeshBuilder.CreateSphere("xraySource", 
+        {diameter: 0.5, segments: 16}, scene);
+    xraySource.position.x = 5;
+    xraySource.position.y = 3;
     
-    // Run the engine
-    engine.runRenderLoop(function() {
-        scene.render();
-        physics.update();
-    });
+    const detector = BABYLON.MeshBuilder.CreateBox("detector", 
+        {width: 5, height: 4, depth: 0.2}, scene);
+    detector.position.x = -5;
+    detector.position.y = 3;
     
-    // Handle window resize
-    window.addEventListener('resize', function() {
-        engine.resize();
-    });
+    const xrayBeam = BABYLON.MeshBuilder.CreateCylinder("xrayBeam", 
+        {diameter: 0.1, height: 10}, scene);
+    xrayBeam.position.y = 3;
     
-    // Hide loading message after a short delay
-    setTimeout(function() {
-        loading.style.display = 'none';
-    }, 2000);
-});
+    scannerAssembly = new BABYLON.TransformNode("scannerAssembly", scene);
+    xraySource.parent = scannerAssembly;
+    detector.parent = scannerAssembly;
+    xrayBeam.parent = scannerAssembly;
+}
+
+function createVisualizationElements() {
+    slicePlane = BABYLON.MeshBuilder.CreatePlane("slicePlane", 
+        {width: 6, height: 6}, scene);
+    slicePlane.position.y = 2.5;
+    slicePlane.isVisible = false;
+    
+    reconstructionVolume = BABYLON.MeshBuilder.CreateBox("reconstructionVolume", 
+        {width: 6, height: 5, depth: 6}, scene);
+    reconstructionVolume.position.y = 2.5;
+    reconstructionVolume.isVisible = false;
+}
+
+function setupObjectManipulation() {
+    // ... your object manipulation code ...
+}
+
+// MAKE SURE THIS EXPORT EXISTS
+export function getSceneElements() {
+    return {
+        scene,
+        cylinder,
+        block,
+        gantry,
+        scannerAssembly,
+        slicePlane,
+        reconstructionVolume,
+        cylinderMat,
+        blockMat,
+        chamberMat
+    };
+}
