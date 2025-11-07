@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulasi CT-Scan 3D dengan Sinogram</title>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="header">
+        <h1>Simulasi CT-Scan 3D dengan Sinogram</h1>
+        <p class="subtitle">Visualisasi proses pemindaian CT dengan objek sederhana dan tampilan sinogram waktu nyata</p>
+    </div>
+    
+    <div id="main-container">
+        <div id="left-panel">
+            <div class="panel">
+                <h2>Kontrol Pemindaian</h2>
+                
+                <div class="control-group">
+                    <label>Mode Pemindaian</label>
+                    <div class="mode-buttons">
+                        <button id="mode-scan" class="active-mode">Jalankan CT Scan</button>
+                        <button id="mode-reconstruct">Rekonstruksi 3D</button>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label for="scan-speed">Kecepatan Pemindaian</label>
+                    <div class="slider-container">
+                        <input type="range" id="scan-speed" min="1" max="10" step="1" value="5">
+                        <div class="value-display" id="scan-speed-value">5</div>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label for="slice-position">Posisi Irisan</label>
+                    <div class="slider-container">
+                        <input type="range" id="slice-position" min="0" max="100" step="1" value="50">
+                        <div class="value-display" id="slice-position-value">50%</div>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label for="object-density">Kepadatan Objek</label>
+                    <div class="slider-container">
+                        <input type="range" id="object-density" min="1" max="5" step="1" value="3">
+                        <div class="value-display" id="object-density-value">3</div>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label for="chamber-transparency">Transparansi Ruang</label>
+                    <div class="slider-container">
+                        <input type="range" id="chamber-transparency" min="0" max="100" step="1" value="20">
+                        <div class="value-display" id="chamber-transparency-value">20%</div>
+                    </div>
+                </div>
+                
+                <button id="start-scan-btn">Mulai Pemindaian</button>
+                <button id="reset-btn">Reset Simulasi</button>
+                
+                <div class="scan-progress">
+                    <div class="scan-progress-bar" id="scan-progress-bar"></div>
+                </div>
+                
+                <div class="slice-display" id="slice-display">
+                    Sudut: 0°/360°
+                </div>
+                
+                <div class="key-indicator" id="object-control-indicator">
+                    <div>Kontrol Objek: Tahan tombol <span class="key">O</span> + Klik & Tarik untuk memindahkan objek</div>
+                    <div>Scroll mouse untuk mengubah ukuran</div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h2>Informasi CT-Scan</h2>
+                <div class="info-text">
+                    <p>Computed Tomography (CT) menggunakan <span class="highlight">proyeksi sinar-X</span> dari berbagai sudut untuk merekonstruksi <span class="highlight">gambar penampang</span>.</p>
+                    <p>Sinogram menunjukkan data proyeksi mentah yang dikumpulkan selama pemindaian CT, dengan setiap baris mewakili satu sudut proyeksi.</p>
+                    <p id="physics-explanation">Simulasi ini menunjukkan bagaimana sinar-X melewati objek dengan kepadatan berbeda untuk membuat gambar proyeksi.</p>
+                </div>
+                
+                <div class="scan-visualization">
+                    <div>Sudut Saat Ini: <span id="current-angle">0°</span></div>
+                    <div>Intensitas Sinar-X: <span id="xray-intensity">100%</span></div>
+                    <div>Sinyal Terdeteksi: <span id="detected-signal">85%</span></div>
+                </div>
+                
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #4fc3f7;"></div>
+                        <span>Sumber Sinar-X</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #ff6b6b;"></div>
+                        <span>Silinder</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #51cf66;"></div>
+                        <span>Detektor</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #ffd93d;"></div>
+                        <span>Balok</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="center-container">
+            <div id="canvas-container">
+                <canvas id="renderCanvas"></canvas>
+                <div id="loading">
+                    <div>Memuat Simulasi CT-Scan...</div>
+                    <div style="font-size: 0.9rem; margin-top: 10px;">Menginisialisasi lingkungan 3D dan komponen pemindaian</div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="right-panel">
+            <div class="panel">
+                <h2>Tampilan Sinogram</h2>
+                <div id="sinogram-container">
+                    <div id="sinogram-title">DATA PROYEKSI (SINOGRAM)</div>
+                    <canvas id="sinogram-canvas"></canvas>
+                    <div class="sinogram-stats">
+                        <div class="sinogram-value">Sudut: <span id="sinogram-angle">0°</span></div>
+                        <div class="sinogram-value">Proyeksi: <span id="projection-count">0</span>/180</div>
+                    </div>
+                </div>
+                <div class="info-text" style="margin-top: 12px;">
+                    <p>Sinogram memvisualisasikan data proyeksi mentah. Setiap garis horizontal mewakili satu proyeksi pada sudut tertentu.</p>
+                    <p>Area terang menunjukkan penyerapan sinar-X yang lebih sedikit, area gelap menunjukkan penyerapan lebih banyak.</p>
+                    <p><span class="highlight">Analisis Pola:</span> Kurva karakteristik dalam sinogram sesuai dengan bentuk dan posisi objek yang dipindai.</p>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h2>Nilai Edukasi</h2>
+                <div class="info-text">
+                    <p>Visualisasi ini membantu siswa memahami:</p>
+                    <ul style="margin-left: 18px; margin-top: 8px;">
+                        <li>Bagaimana pemindai CT memperoleh data dari berbagai sudut</li>
+                        <li>Konsep atenuasi dan kepadatan jaringan</li>
+                        <li>Rekonstruksi gambar dari data proyeksi</li>
+                        <li>Visualisasi 3D struktur internal</li>
+                        <li>Hubungan antara geometri objek dan pola sinogram</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
